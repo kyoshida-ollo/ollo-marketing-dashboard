@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ollo マーケティングダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --muted: #898781;
+    --gridline: #e1e0d9;
+    --border: rgba(11, 11, 11, 0.10);
+
+    --series-1: #2a78d6;
+    --series-2: #1baf7a;
+    --series-3: #eda100;
+    --series-4: #008300;
+    --series-5: #4a3aa7;
+    --series-6: #e34948;
+    --series-7: #e87ba4;
+    --series-8: #eb6834;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted: #898781;
+      --gridline: #2c2c2a;
+      --border: rgba(255, 255, 255, 0.10);
+
+      --series-1: #3987e5;
+      --series-2: #199e70;
+      --series-3: #c98500;
+      --series-4: #008300;
+      --series-5: #9085e9;
+      --series-6: #e66767;
+      --series-7: #d55181;
+      --series-8: #d95926;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", sans-serif;
+  }
+
+  header {
+    padding: 24px clamp(16px, 4vw, 40px) 12px;
+  }
+
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 1.4rem;
+  }
+
+  #meta {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--series-3);
+    color: #1a1a19;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  main {
+    padding: 0 clamp(16px, 4vw, 40px) 40px;
+  }
+
+  .section {
+    margin-top: 28px;
+  }
+
+  .section h2 {
+    font-size: 1.05rem;
+    margin: 0 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .card h3 {
+    margin: 0 0 12px;
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .stat-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 140px;
+  }
+
+  .stat-value {
+    font-size: 2.4rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>ollo マーケティングダッシュボード</h1>
+  <div id="meta"></div>
+</header>
+<main id="dashboard-root"></main>
+
+<script src="charts/charts.js"></script>
+<script src="../data/dashboard_data.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

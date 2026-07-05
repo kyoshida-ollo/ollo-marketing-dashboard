@@ -1,0 +1,18 @@
+# secrets
+.env
+.env.*
+secrets/
+*.json.key
+service-account*.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# os
+.DS_Store
+
+# claude code local settings
+.claude/settings.local.json
