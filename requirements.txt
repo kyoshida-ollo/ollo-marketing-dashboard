@@ -1,0 +1,4 @@
+# サービスアカウント経由でGoogle Sheets APIを使う場合のみ必要
+# （未インストールでも公開CSV／ローカルキャッシュ経路で動作する）
+google-auth>=2.0
+requests>=2.28

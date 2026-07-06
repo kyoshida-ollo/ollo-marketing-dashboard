@@ -1,9 +1,13 @@
 # secrets
 .env
 .env.*
+!.env.example
 secrets/
 *.json.key
 service-account*.json
+
+# 実データのローカルキャッシュ（社内数値のためリポジトリに入れない）
+data/cache/
 
 # python
 __pycache__/

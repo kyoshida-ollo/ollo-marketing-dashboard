@@ -88,13 +88,24 @@ ollo-dashboard/
 ## 現在のステータス
 
 - [x] 1. リポジトリ初期化（ディレクトリ構成、.gitignore、README）
-- [ ] 2. `data/connectors/sheets.py` — HubSpot集計シート接続（シートID・タブ名要確認）
-- [ ] 3. `data/connectors/ga4.py` — GA4 Data API疎通確認（プロパティID・認証方法要確認）
-- [ ] 4. `data/connectors/google_ads.py` — Google Ads API疎通確認（Developer Token・顧客ID要確認）
+- [x] 2. `data/connectors/sheets.py` — 施策集計シート接続済み（実データ）
+- [ ] 3. `data/connectors/ga4.py` — GA4 Data API疎通確認（プロパティID・認証方法要確認）→ ダミーのまま
+- [ ] 4. `data/connectors/google_ads.py` — キーワード分析のみ担当（Developer Token・顧客ID要確認）→ ダミーのまま
 - [x] 5. ダミーデータで `site/index.html` の画面・グラフ構成の枠を作成（4ページ構成にリニューアル済み）
-- [ ] 6. `update.command` の作成
+- [x] 6. `update.command` の作成
 
-現在、`data/connectors/*.py` はダミーデータを返すスタブ。実APIに接続する際はこのファイルの中身だけを差し替え、`build_data.py`側のインターフェースは変えない。
+### データソースの実態（2026-07時点）
+
+- **実データ**: 施策実績（リード・商談化・受注・費用・予想リード=目標）。ソースはスプレッドシート
+  「LookerStudio_data」（ID: `1kaNNLhxanVi8LwvlWvMYKArBlV3H19dMHAsS8xPhuUk`）の `expense_lead` タブ。
+  カテゴリは 展示会/ウェビナー/HP/Google広告 の4種。展示会リードランクはA/B/Cの3段階。
+  **「新規会社数」はデータソースに存在しない**ので画面からも外してある。
+- **取得経路**（`sheets.py`が上から順に試す）: ①サービスアカウント（`.env`の`GOOGLE_SERVICE_ACCOUNT_JSON`、
+  シートをSAメールに共有要）→ ②公開CSV → ③ローカルキャッシュ `data/cache/expense_lead.csv`（gitignore済み）。
+  ①②成功時にキャッシュ自動更新。現状は認証未設定のためキャッシュで動いている。
+- **ダミーのまま**（`build_data.py`が`_dummy_keys`に列挙し、画面に「ダミー」チップが付く）:
+  GA4系全部・Search Consoleキーワード・広告キーワード分析・HubSpot取引明細（受注/商談一覧）・
+  HP問い合わせ内訳（きっかけ/都道府県）。ダミー関数は `connectors/pending_dummy.py`・`ga4.py`・`google_ads.py`。
 
 ## 載せるべき指標（たたき台。要確定）
 

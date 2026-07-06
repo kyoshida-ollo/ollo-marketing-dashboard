@@ -11,7 +11,7 @@ function cssVar(name) {
 }
 
 // 施策カテゴリの色は固定割り当て（フィルタや並び順で色が変わらないように）
-const CHANNEL_SLOT = { "展示会": 1, "HP": 2, "Google広告": 3, "紹介": 5 };
+const CHANNEL_SLOT = { "展示会": 1, "HP": 2, "Google広告": 3, "ウェビナー": 5, "紹介": 6 };
 
 function seriesColor(name, index) {
   const slot = CHANNEL_SLOT[name] ?? (index % 8) + 1;
@@ -69,8 +69,10 @@ function summaryTotals(channels, range) {
   const [from, to] = range || periodRange;
   const totals = { leads: 0, companies: 0, deals: 0, wins: 0, revenue: 0, cost: 0 };
   for (const key of Object.keys(totals)) {
+    const metric = sm.metrics[key];
+    if (!metric) continue; // データソースに存在しない指標（例: 会社数）はスキップ
     for (const ch of list) {
-      const arr = sm.metrics[key][ch] || [];
+      const arr = metric[ch] || [];
       for (let i = from; i <= to; i++) totals[key] += arr[i] || 0;
     }
   }
@@ -80,7 +82,8 @@ function summaryTotals(channels, range) {
 // 指標の月次系列（スパークライン用）。率系は月ごとに計算する
 function monthlyMetricSeries(key) {
   const sm = window.DASHBOARD_DATA.summary_monthly;
-  const total = (k, i) => sm.channels.reduce((s, ch) => s + (sm.metrics[k][ch][i] || 0), 0);
+  const total = (k, i) =>
+    sm.metrics[k] ? sm.channels.reduce((s, ch) => s + ((sm.metrics[k][ch] || [])[i] || 0), 0) : 0;
   return sm.months.map((_, i) => {
     switch (key) {
       case "deal_rate": { const l = total("leads", i); return l ? total("deals", i) / l : null; }
@@ -382,7 +385,6 @@ function renderFunnel(def) {
   const t = summaryTotals(null);
   const stages = [
     { label: "リード", value: t.leads },
-    { label: "新規会社", value: t.companies },
     { label: "商談化", value: t.deals },
     { label: "受注", value: t.wins },
   ];
@@ -671,6 +673,20 @@ function renderChartCard(def, data) {
   return card;
 }
 
+// 未接続データ（ダミー）のカードに「ダミー」チップを付ける
+function markIfDummy(el, def, data) {
+  if (!el || !def.dataKey) return el;
+  if (!Array.isArray(data._dummy_keys) || !data._dummy_keys.includes(def.dataKey)) return el;
+  const chip = document.createElement("span");
+  chip.className = "dummy-chip";
+  chip.textContent = "ダミー";
+  chip.title = "実データ未接続のためダミーデータを表示しています";
+  const h3 = el.querySelector("h3");
+  if (h3) h3.appendChild(chip);
+  else el.prepend(chip);
+  return el;
+}
+
 function renderDef(def) {
   const data = window.DASHBOARD_DATA;
   switch (def.type) {
@@ -690,13 +706,13 @@ function renderDef(def) {
       return renderInsights(def);
     case "kpi_row":
       if (!(def.dataKey in data)) break;
-      return renderKpiRow(def, data);
+      return markIfDummy(renderKpiRow(def, data), def, data);
     case "table":
       if (!(def.dataKey in data)) break;
-      return renderTable(def, data);
+      return markIfDummy(renderTable(def, data), def, data);
     default:
       if (!(def.dataKey in data)) break;
-      return renderChartCard(def, data);
+      return markIfDummy(renderChartCard(def, data), def, data);
   }
   console.warn(`dashboard_data.json に "${def.dataKey}" がありません（id: ${def.id}）`);
   return null;
@@ -776,8 +792,11 @@ function init() {
   const metaEl = document.getElementById("meta");
   if (data.meta) {
     const generated = new Date(data.meta.generated_at).toLocaleString("ja-JP");
-    const badge = data.meta.source === "dummy" ? '<span class="badge">ダミーデータ表示中</span>' : "";
-    metaEl.innerHTML = `${data.meta.fiscal_year || ""}　更新日時: ${generated} ${badge}`;
+    let badge = "";
+    if (data.meta.source === "dummy") badge = '<span class="badge">ダミーデータ表示中</span>';
+    else if (data.meta.dummy_note) badge = `<span class="badge">${data.meta.dummy_note}</span>`;
+    const period = data.meta.period_label || data.meta.fiscal_year || "";
+    metaEl.innerHTML = `${period}　更新日時: ${generated} ${badge}`;
   }
 
   const pages = [...new Set(window.CHART_DEFS.map((d) => d.page))];

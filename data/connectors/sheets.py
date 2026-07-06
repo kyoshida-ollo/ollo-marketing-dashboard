@@ -1,175 +1,193 @@
-"""Google Sheets API経由でHubSpot集計シート・展示会費用シートを読む。
+"""施策集計スプレッドシート「LookerStudio_data」（expense_leadタブ）を読む実データコネクタ。
 
-TODO: シートID・タブ名が確定したら実装する。
-現状は build_data.py が組み立てるデータ構造に合わせたダミーデータ（FY26 = 2025-07〜2026-06）を返す。
+列構成: イベント名 / 実施日 / 費用（税抜） / 獲得リード数 / 予想リード数 / 商談化数 /
+受注数 / 受注金額 / カテゴリー（展示会・ウェビナー・HP・Google広告） / 展示会_リードA〜C
+
+取得経路は上から順に試し、成功したらローカルキャッシュを更新する:
+1. サービスアカウント（.env の GOOGLE_SERVICE_ACCOUNT_JSON。シートをSAのメールアドレスに共有しておくこと）
+2. 公開CSVエクスポート（シートが「リンクを知っている全員（閲覧者）」になっている場合のみ）
+3. ローカルキャッシュ data/cache/expense_lead.csv
 """
 
-MONTHS = [
-    "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12",
-    "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
-]
+import csv
+import io
+import json
+import os
+import re
+import urllib.parse
+import urllib.request
+from pathlib import Path
 
-CHANNELS = ["展示会", "HP", "Google広告", "紹介"]
+DEFAULT_SHEET_ID = "1kaNNLhxanVi8LwvlWvMYKArBlV3H19dMHAsS8xPhuUk"
+DEFAULT_TAB = "expense_lead"
+CACHE_PATH = Path(__file__).resolve().parent.parent / "cache" / "expense_lead.csv"
 
-# 施策カテゴリ別の月次実績（HubSpotのリードソース属性で集計する想定）
-_LEADS = {
-    "展示会":     [0, 25, 0, 32, 0, 0, 18, 0, 40, 0, 22, 0],
-    "HP":         [9, 11, 10, 13, 12, 8, 14, 12, 16, 13, 15, 17],
-    "Google広告": [7, 8, 9, 11, 10, 9, 12, 10, 13, 11, 12, 14],
-    "紹介":       [2, 1, 3, 2, 2, 1, 3, 2, 4, 2, 3, 3],
+CHANNELS = ["展示会", "ウェビナー", "HP", "Google広告"]
+
+_COLUMNS = {
+    "name": "イベント名",
+    "date": "実施日",
+    "cost": "費用（税抜）",
+    "leads": "獲得リード数",
+    "expected": "予想リード数",
+    "deals": "商談化数",
+    "wins": "受注数",
+    "revenue": "受注金額",
+    "category": "カテゴリー",
+    "rank_a": "展示会_リードA",
+    "rank_b": "展示会_リードB",
+    "rank_c": "展示会_リードC",
 }
 
-_COMPANIES = {
-    "展示会":     [0, 18, 0, 24, 0, 0, 14, 0, 30, 0, 17, 0],
-    "HP":         [7, 8, 8, 10, 9, 6, 11, 9, 12, 10, 11, 13],
-    "Google広告": [5, 6, 7, 8, 8, 7, 9, 8, 10, 8, 9, 11],
-    "紹介":       [2, 1, 3, 2, 2, 1, 3, 2, 4, 2, 3, 3],
-}
-
-_DEALS = {
-    "展示会":     [0, 5, 1, 7, 1, 0, 4, 1, 9, 1, 5, 0],
-    "HP":         [2, 3, 2, 3, 3, 1, 4, 3, 4, 3, 4, 4],
-    "Google広告": [1, 2, 2, 2, 2, 2, 3, 2, 3, 2, 3, 3],
-    "紹介":       [1, 1, 2, 1, 1, 1, 2, 1, 3, 1, 2, 2],
-}
-
-_WINS = {
-    "展示会":     [0, 1, 0, 2, 1, 0, 1, 0, 3, 0, 2, 0],
-    "HP":         [1, 1, 0, 1, 1, 0, 1, 1, 2, 1, 1, 2],
-    "Google広告": [0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1],
-    "紹介":       [0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1],
-}
-
-_REVENUE = {
-    "展示会":     [0, 4200000, 0, 7600000, 3200000, 0, 5100000, 0, 12800000, 0, 8400000, 0],
-    "HP":         [2800000, 3500000, 0, 4100000, 2600000, 0, 3800000, 3100000, 7200000, 2900000, 3600000, 6800000],
-    "Google広告": [0, 2400000, 0, 3100000, 2800000, 0, 2600000, 0, 3400000, 2700000, 2900000, 3200000],
-    "紹介":       [0, 5200000, 4800000, 0, 3900000, 0, 4600000, 5100000, 4200000, 0, 5800000, 4400000],
-}
-
-# 費用。Google広告分は google_ads.py 側から取得して build_data.py がマージする
-_COST = {
-    "展示会":     [0, 1200000, 0, 1500000, 0, 0, 980000, 0, 1800000, 0, 1350000, 0],
-    "HP":         [0] * 12,
-    "Google広告": [0] * 12,
-    "紹介":       [0] * 12,
-}
+_DATE_RE = re.compile(r"(\d{4})/(\d{1,2})")
 
 
-def get_summary_monthly() -> dict:
-    """施策カテゴリ別の月次実績（サマリーページの元データ）。"""
-    return {
-        "months": MONTHS,
-        "channels": CHANNELS,
-        "metrics": {
-            "leads": _LEADS,
-            "companies": _COMPANIES,
-            "deals": _DEALS,
-            "wins": _WINS,
-            "revenue": _REVENUE,
-            "cost": _COST,
-        },
-    }
+def _sheet_id() -> str:
+    return os.environ.get("DASHBOARD_SHEET_ID", DEFAULT_SHEET_ID)
 
 
-def get_won_deals() -> list:
-    """受注案件一覧（HubSpotの受注済み取引を想定）。"""
-    return [
-        {"month": "2025-08", "deal": "A社 生産設備更新案件", "amount": 4200000, "source": "展示会", "contract": "年間ライセンス"},
-        {"month": "2025-08", "deal": "B社 業務システム導入", "amount": 3500000, "source": "HP", "contract": "導入支援＋年間ライセンス"},
-        {"month": "2025-09", "deal": "C社 追加ライセンス", "amount": 4800000, "source": "紹介", "contract": "追加ライセンス"},
-        {"month": "2025-10", "deal": "D社 全社導入", "amount": 7600000, "source": "展示会", "contract": "年間ライセンス"},
-        {"month": "2025-11", "deal": "E社 部門導入", "amount": 2600000, "source": "HP", "contract": "年間ライセンス"},
-        {"month": "2026-01", "deal": "F社 システムリプレイス", "amount": 5100000, "source": "展示会", "contract": "年間ライセンス＋保守"},
-        {"month": "2026-02", "deal": "G社 新規導入", "amount": 3100000, "source": "HP", "contract": "年間ライセンス"},
-        {"month": "2026-03", "deal": "H社 グループ展開", "amount": 12800000, "source": "展示会", "contract": "複数年契約"},
-        {"month": "2026-03", "deal": "I社 新規導入", "amount": 3400000, "source": "Google広告", "contract": "年間ライセンス"},
-        {"month": "2026-04", "deal": "J社 部門導入", "amount": 2700000, "source": "Google広告", "contract": "年間ライセンス"},
-        {"month": "2026-05", "deal": "K社 全社導入", "amount": 5800000, "source": "紹介", "contract": "年間ライセンス＋導入支援"},
-        {"month": "2026-06", "deal": "L社 新規導入", "amount": 6800000, "source": "HP", "contract": "複数年契約"},
-    ]
+def _tab() -> str:
+    return os.environ.get("DASHBOARD_SHEET_TAB", DEFAULT_TAB)
 
 
-def get_deal_list() -> list:
-    """商談化一覧（商談ステージに進んだ取引を想定）。"""
-    return [
-        {"month": "2025-08", "deal": "A社 生産設備更新案件", "amount": 4200000, "source": "展示会", "stage": "受注"},
-        {"month": "2025-08", "deal": "M社 検討案件", "amount": 3000000, "source": "展示会", "stage": "失注"},
-        {"month": "2025-09", "deal": "N社 部門導入検討", "amount": 2500000, "source": "HP", "stage": "商談中"},
-        {"month": "2025-10", "deal": "D社 全社導入", "amount": 7600000, "source": "展示会", "stage": "受注"},
-        {"month": "2025-10", "deal": "O社 リプレイス検討", "amount": 4500000, "source": "展示会", "stage": "提案中"},
-        {"month": "2025-11", "deal": "P社 新規検討", "amount": 2800000, "source": "Google広告", "stage": "見積提示"},
-        {"month": "2026-01", "deal": "F社 システムリプレイス", "amount": 5100000, "source": "展示会", "stage": "受注"},
-        {"month": "2026-01", "deal": "Q社 導入検討", "amount": 3200000, "source": "HP", "stage": "商談中"},
-        {"month": "2026-02", "deal": "R社 部門導入検討", "amount": 2900000, "source": "紹介", "stage": "提案中"},
-        {"month": "2026-03", "deal": "H社 グループ展開", "amount": 12800000, "source": "展示会", "stage": "受注"},
-        {"month": "2026-03", "deal": "S社 新規検討", "amount": 3600000, "source": "展示会", "stage": "商談中"},
-        {"month": "2026-04", "deal": "T社 リプレイス検討", "amount": 5000000, "source": "HP", "stage": "見積提示"},
-        {"month": "2026-05", "deal": "U社 導入検討", "amount": 3300000, "source": "Google広告", "stage": "商談中"},
-        {"month": "2026-06", "deal": "V社 全社導入検討", "amount": 8200000, "source": "紹介", "stage": "提案中"},
-    ]
+def _fetch_via_service_account():
+    sa_path = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "")
+    if not sa_path or not Path(sa_path).exists():
+        return None
+    try:
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import Request
+    except ImportError:
+        print("warn: google-auth が未インストールのためサービスアカウント経路をスキップ"
+              "（pip install -r requirements.txt）")
+        return None
+    creds = service_account.Credentials.from_service_account_file(
+        sa_path, scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    )
+    creds.refresh(Request())
+    url = (
+        f"https://sheets.googleapis.com/v4/spreadsheets/{_sheet_id()}"
+        f"/values/{urllib.parse.quote(_tab())}?majorDimension=ROWS"
+    )
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {creds.token}"})
+    with urllib.request.urlopen(req, timeout=30) as res:
+        payload = json.load(res)
+    return payload.get("values")
 
 
-def get_campaign_list() -> list:
-    """施策一覧（展示会・広告など実施した施策）。"""
-    return [
-        {"name": "ものづくりワールド東京", "category": "展示会", "period": "2025-08", "cost": 1200000, "leads": 25},
-        {"name": "IT導入EXPO", "category": "展示会", "period": "2025-10", "cost": 1500000, "leads": 32},
-        {"name": "スマート工場EXPO", "category": "展示会", "period": "2026-01", "cost": 980000, "leads": 18},
-        {"name": "DX総合展", "category": "展示会", "period": "2026-03", "cost": 1800000, "leads": 40},
-        {"name": "ものづくりワールド大阪", "category": "展示会", "period": "2026-05", "cost": 1350000, "leads": 22},
-        {"name": "Google広告 検索キャンペーン", "category": "Google広告", "period": "通年", "cost": 4955000, "leads": 126},
-        {"name": "HP問い合わせ（自然流入・SEO）", "category": "HP", "period": "通年", "cost": 0, "leads": 150},
-    ]
+def _fetch_via_public_csv():
+    url = (
+        f"https://docs.google.com/spreadsheets/d/{_sheet_id()}"
+        f"/gviz/tq?tqx=out:csv&sheet={urllib.parse.quote(_tab())}"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=30) as res:
+            text = res.read().decode("utf-8")
+    except Exception:
+        return None
+    if text.lstrip().startswith("<"):  # ログインページ等のHTMLが返ってきた場合
+        return None
+    return list(csv.reader(io.StringIO(text)))
 
 
-def get_expo_by_expo() -> dict:
-    """展示会ごとの主要指標（リードランク別件数・商談化率・リード単価・受注）。"""
-    return {
-        "expos": [
-            "ものづくりワールド東京(8月)",
-            "IT導入EXPO(10月)",
-            "スマート工場EXPO(1月)",
-            "DX総合展(3月)",
-            "ものづくりワールド大阪(5月)",
-        ],
-        "ranks": {
-            "Aランク": [5, 7, 3, 10, 4],
-            "Bランク": [8, 10, 6, 14, 7],
-            "Cランク": [9, 10, 6, 11, 8],
-            "Dランク": [3, 5, 3, 5, 3],
-        },
-        "conv_rate": [0.20, 0.22, 0.22, 0.23, 0.23],
-        "cost_per_lead": [48000, 46875, 54444, 45000, 61364],
-        "wins": [1, 2, 1, 3, 2],
-        "win_rate": [0.20, 0.29, 0.25, 0.33, 0.40],
-    }
+def _read_cache():
+    if not CACHE_PATH.exists():
+        return None
+    with CACHE_PATH.open(encoding="utf-8") as f:
+        return list(csv.reader(f))
 
 
-def get_targets() -> dict:
-    """月次目標値（リード数・受注数）。実運用では目標管理シートから読む想定。"""
-    return {
-        "leads": [20, 40, 25, 55, 28, 22, 45, 28, 70, 30, 50, 35],
-        "wins": [2, 3, 2, 4, 3, 2, 4, 3, 5, 3, 4, 4],
-    }
+def _write_cache(rows) -> None:
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with CACHE_PATH.open("w", encoding="utf-8", newline="") as f:
+        csv.writer(f).writerows(rows)
 
 
-def get_hp_answers() -> dict:
-    """HP問い合わせフォームの回答内容の内訳（きっかけ・都道府県）。"""
-    return {
-        "hp_trigger": {
-            "Web検索": 58,
-            "展示会で知った": 24,
-            "知人の紹介": 18,
-            "SNS": 12,
-            "広告": 28,
-        },
-        "hp_prefecture": {
-            "東京都": 42,
-            "大阪府": 25,
-            "愛知県": 18,
-            "神奈川県": 15,
-            "福岡県": 10,
-            "その他": 40,
-        },
-    }
+def _fetch_rows():
+    for fetch, label in [
+        (_fetch_via_service_account, "サービスアカウント"),
+        (_fetch_via_public_csv, "公開CSV"),
+    ]:
+        try:
+            rows = fetch()
+        except Exception as e:
+            print(f"warn: {label}経由の取得に失敗: {e}")
+            rows = None
+        if rows:
+            print(f"info: スプレッドシートを{label}経由で取得")
+            _write_cache(rows)
+            return rows
+    rows = _read_cache()
+    if rows:
+        print(f"info: ローカルキャッシュを使用（{CACHE_PATH}）")
+        return rows
+    raise RuntimeError(
+        "スプレッドシートを取得できません。GOOGLE_SERVICE_ACCOUNT_JSON を .env に設定するか、"
+        "data/cache/expense_lead.csv を用意してください。"
+    )
+
+
+def _to_number(text):
+    if text is None:
+        return None
+    s = str(text).strip().replace("¥", "").replace(",", "").replace("％", "%")
+    if not s:
+        return None
+    if s.endswith("%"):
+        try:
+            return float(s[:-1]) / 100
+        except ValueError:
+            return None
+    try:
+        f = float(s)
+    except ValueError:
+        return None
+    return int(f) if f == int(f) else f
+
+
+def _to_month(text):
+    m = _DATE_RE.match(str(text or "").strip())
+    return f"{m.group(1)}-{int(m.group(2)):02d}" if m else None
+
+
+def load_records() -> list:
+    """シートの行を正規化したレコードのリストにして返す。"""
+    rows = _fetch_rows()
+    header_idx = None
+    for i, row in enumerate(rows):
+        if _COLUMNS["name"] in row:
+            header_idx = i
+            break
+    if header_idx is None:
+        raise RuntimeError(f"ヘッダー行（{_COLUMNS['name']}列）が見つかりません")
+    header = rows[header_idx]
+    col = {}
+    for key, label in _COLUMNS.items():
+        col[key] = header.index(label) if label in header else None
+
+    def cell(row, key):
+        i = col[key]
+        return row[i] if i is not None and i < len(row) else None
+
+    records = []
+    for row in rows[header_idx + 1:]:
+        name = (cell(row, "name") or "").strip()
+        month = _to_month(cell(row, "date"))
+        category = (cell(row, "category") or "").strip()
+        if not name or not month or not category:
+            continue
+        records.append({
+            "name": name,
+            "month": month,
+            "category": category,
+            "cost": _to_number(cell(row, "cost")),
+            "leads": _to_number(cell(row, "leads")),
+            "expected": _to_number(cell(row, "expected")),
+            "deals": _to_number(cell(row, "deals")),
+            "wins": _to_number(cell(row, "wins")),
+            "revenue": _to_number(cell(row, "revenue")),
+            "rank_a": _to_number(cell(row, "rank_a")),
+            "rank_b": _to_number(cell(row, "rank_b")),
+            "rank_c": _to_number(cell(row, "rank_c")),
+        })
+    return records

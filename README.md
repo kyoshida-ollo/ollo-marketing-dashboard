@@ -6,14 +6,18 @@
 
 ## 使い方
 
-現状はダミーデータでの画面確認段階。
+`update.command` をダブルクリック（または以下を実行）。
 
 ```bash
 python3 data/build_data.py   # data/dashboard_data.json と .js を生成
 open site/index.html         # ブラウザで確認
 ```
 
-実データ接続後は `update.command` をダブルクリックすれば同じ流れが自動実行される（未実装）。
+施策実績（リード・商談化・受注・費用）はスプレッドシート実データ。GA4・広告キーワード・HubSpot明細は
+未接続のためダミー（画面に「ダミー」チップ表示）。
+
+シートをAPIから直接取得するには `.env.example` を `.env` にコピーし、サービスアカウント鍵を設定する
+（`pip install -r requirements.txt` が必要）。未設定でも `data/cache/` のキャッシュで動作する。
 
 ## ディレクトリ構成
 
