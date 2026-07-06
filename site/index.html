@@ -23,6 +23,13 @@
     --series-6: #e34948;
     --series-7: #e87ba4;
     --series-8: #eb6834;
+
+    --good: #006300;
+    --bad: #c02b2b;
+    --funnel-1: #86b6ef;
+    --funnel-2: #5598e7;
+    --funnel-3: #2a78d6;
+    --funnel-4: #1c5cab;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -43,6 +50,13 @@
       --series-6: #e66767;
       --series-7: #d55181;
       --series-8: #d95926;
+
+      --good: #0ca30c;
+      --bad: #e66767;
+      --funnel-1: #86b6ef;
+      --funnel-2: #5598e7;
+      --funnel-3: #3987e5;
+      --funnel-4: #1c5cab;
     }
   }
 
@@ -56,12 +70,12 @@
   }
 
   header {
-    padding: 24px clamp(16px, 4vw, 40px) 12px;
+    padding: 20px clamp(16px, 4vw, 40px) 0;
   }
 
   header h1 {
     margin: 0 0 4px;
-    font-size: 1.4rem;
+    font-size: 1.35rem;
   }
 
   #meta {
@@ -80,25 +94,79 @@
     font-weight: 600;
   }
 
+  .header-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 14px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--page);
+    z-index: 20;
+  }
+
+  #tab-nav {
+    display: flex;
+    gap: 4px;
+  }
+
+  .tab {
+    appearance: none;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 14px 10px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .tab:hover { color: var(--text-primary); }
+
+  .tab.active {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom-color: var(--series-1);
+  }
+
+  #period-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    padding-bottom: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+  }
+
+  #period-bar select {
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+
   main {
     padding: 0 clamp(16px, 4vw, 40px) 40px;
   }
 
-  .section {
-    margin-top: 28px;
-  }
+  .section { margin-top: 24px; }
 
   .section h2 {
-    font-size: 1.05rem;
+    font-size: 1.02rem;
     margin: 0 0 12px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--border);
     color: var(--text-primary);
   }
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
     gap: 16px;
   }
 
@@ -107,7 +175,10 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 16px;
+    min-width: 0;
   }
+
+  .card.wide { grid-column: 1 / -1; }
 
   .card h3 {
     margin: 0 0 12px;
@@ -121,17 +192,162 @@
     width: 100%;
   }
 
-  .stat-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-height: 140px;
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
   }
 
-  .stat-value {
-    font-size: 2.4rem;
+  .kpi-cell {
+    padding: 4px 0;
+    min-width: 0;
+  }
+
+  .kpi-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kpi-value-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .kpi-value {
+    font-size: 1.45rem;
     font-weight: 700;
+    line-height: 1.2;
     font-variant-numeric: tabular-nums;
+  }
+
+  .delta {
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .delta.good { color: var(--good); }
+  .delta.bad { color: var(--bad); }
+  .delta.flat { color: var(--muted); }
+
+  .sparkline {
+    position: relative;
+    height: 30px;
+    margin-top: 6px;
+    opacity: 0.85;
+  }
+
+  .funnel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  .funnel-row {
+    display: grid;
+    grid-template-columns: 72px 1fr 130px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .funnel-label {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    text-align: right;
+  }
+
+  .funnel-track { min-width: 0; }
+
+  .funnel-bar {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    min-width: 44px;
+    border-radius: 4px;
+    padding: 0 8px;
+  }
+
+  .funnel-bar-1 { background: var(--funnel-1); }
+  .funnel-bar-2 { background: var(--funnel-2); }
+  .funnel-bar-3 { background: var(--funnel-3); }
+  .funnel-bar-4 { background: var(--funnel-4); }
+
+  .funnel-count {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #ffffff;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  .funnel-conv {
+    font-size: 0.78rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .insights {
+    margin: 0;
+    padding-left: 1.3em;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
+  .insights strong { color: var(--text-primary); }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+
+  th, td {
+    padding: 7px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--gridline);
+  }
+
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  th.sortable:hover { color: var(--text-primary); }
+  th.sorted-asc::after { content: " ↑"; }
+  th.sorted-desc::after { content: " ↓"; }
+
+  tbody tr:hover td { background: rgba(42, 120, 214, 0.06); }
+
+  td.num, th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .total-row td {
+    font-weight: 700;
+    border-top: 2px solid var(--border);
   }
 </style>
 </head>
@@ -139,6 +355,15 @@
 <header>
   <h1>ollo マーケティングダッシュボード</h1>
   <div id="meta"></div>
+  <div class="header-bar">
+    <nav id="tab-nav"></nav>
+    <div id="period-bar">
+      <span>対象期間</span>
+      <select id="period-from"></select>
+      <span>〜</span>
+      <select id="period-to"></select>
+    </div>
+  </div>
 </header>
 <main id="dashboard-root"></main>
 

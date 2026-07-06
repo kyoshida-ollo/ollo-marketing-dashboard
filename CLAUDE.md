@@ -37,33 +37,53 @@ ollo-dashboard/
 │   ├── dashboard_data.json ← 生成物。gitには入れるが手で編集しない
 │   └── dashboard_data.js   ← 生成物。file://で開いた際のCORS回避用（jsonと同内容をwindow変数に代入）
 ├── site/
-│   ├── index.html          ← ダッシュボード本体
+│   ├── index.html          ← ダッシュボード本体（タブナビ・期間フィルタのガワとCSS）
+│   ├── dashboard.js        ← 描画エンジン（タブ・期間フィルタ・KPIカード・表・Chart.js描画）
 │   └── charts/
-│       └── charts.js       ← グラフ定義一覧（1グラフ=1オブジェクト）
+│       └── charts.js       ← ページ・グラフ・表・KPIの定義一覧（1要素=1オブジェクト）
 ├── update.command          ← ダブルクリックでデータ更新→ブラウザ表示（Mac用）
 └── README.md
 ```
 
+## ダッシュボードの構成（4ページのタブ切り替え）
+
+1. **サマリー** — 主要KPIカード（前期間比デルタ＋スパークライン付き。指標: リード/会社/商談化/商談化率/受注/受注額/平均受注単価/広告費/CPL/ROI）、自動ハイライト、マーケティングファネル＋リード構成比ドーナツ、施策別サマリー表（いずれも対象期間フィルタ連動）、FY26月次推移（全体複合グラフ＋リード目標破線、施策別積み上げ）、生データ表（受注案件・商談化・施策一覧。列見出しクリックでソート可）
+2. **展示会** — KPIカード、月次推移（複合）、展示会ごとの比較（ランク積み上げ＋商談化率右軸、受注数＋受注率右軸、リード単価）
+3. **HP問い合わせ** — KPIカード、月次推移（複合）、CV数・CV率、問い合わせ内容の内訳（きっかけ・都道府県）、HPアクセス分析（流入元別・参照リンク元別の月次推移、急上昇参照元、人気ページ、デバイス・新規/リピーター、Search Console検索キーワード）
+4. **Google広告** — KPIカード、月次推移（費用＋CV複合・CPA）、キーワード分析、CV内容の内訳
+
+複合グラフは `fieldTypes: {field: "line"}` で系列単位に折れ線化し、率など単位が違う系列は `fieldAxes: {field: "y2"}` ＋ `y2Format` で右軸に載せる。
+
+年度はFY26 = 2025-07〜2026-06。対象期間フィルタはサマリーページのKPIカードと施策別サマリー表にのみ効く。
+
 ## グラフ定義の設計方針（ここが「Claudeが指示で編集できる」の要）
 
-`site/charts/charts.js` に配列でグラフ定義を並べる。1グラフ=1オブジェクト：
+`site/charts/charts.js` に配列で定義を並べる。1要素=1オブジェクトで、`page`（タブ名）と `section`（ページ内見出し）で配置が決まる：
 
 ```js
 {
-  id: "monthly_leads_by_source",
-  title: "月次リード数（流入元別）",
-  type: "bar",              // bar / line / pie / table など
-  dataKey: "leads_by_source_monthly",  // dashboard_data.json内のキー
-  groupBy: "lead_channel",
-  section: "展示会・リード",  // ダッシュボード内のセクション見出し
+  id: "expo_conv_rate",
+  page: "展示会",
+  section: "展示会ごとの比較",
+  type: "bar",              // bar / line / pie / kpi_row / table / summary_kpis / summary_table / monthly_stacked
+  shape: "categorical_fields",  // データ形状（charts.js冒頭のコメント参照）
+  title: "商談化率",
+  dataKey: "expo_by_expo",  // dashboard_data.json内のキー
+  categoryField: "expos",
+  fields: ["conv_rate"],
+  valueFormat: "percent",   // percent / currency / number
 }
 ```
 
 - **グラフを追加して** → 配列に1オブジェクト追加
 - **グラフを削除して** → 該当オブジェクトを削除
-- **集計軸を変えて** → `groupBy` を変更
+- **集計軸を変えて** → `categoryField` / `seriesField` / `fields` を変更
 
-個別チャートをハードコードして増やしていく作りにしない。新しい種類の集計が必要な場合は `dashboard_data.json` 側にキーを追加し、`build_data.py` 側の集約ロジックを拡張する。
+個別チャートをハードコードして増やしていく作りにしない。新しい種類の集計が必要な場合は `build_data.py`（＋コネクタ）側でJSONにキーを追加してから定義を足す。描画の仕組み自体を変えるときだけ `site/dashboard.js` を触る。
+
+サマリー系（`summary_kpis` / `summary_table` / `monthly_stacked`）は `summary_monthly` キー
+（`{months, channels, metrics: {leads/companies/deals/wins/revenue/cost: {施策名: [月次値×12]}}}`）から計算される。
+商談化率・受注率・ROIなどの率はJS側で導出するので、JSONには実数だけを入れる。
 
 ## 現在のステータス
 
@@ -71,7 +91,7 @@ ollo-dashboard/
 - [ ] 2. `data/connectors/sheets.py` — HubSpot集計シート接続（シートID・タブ名要確認）
 - [ ] 3. `data/connectors/ga4.py` — GA4 Data API疎通確認（プロパティID・認証方法要確認）
 - [ ] 4. `data/connectors/google_ads.py` — Google Ads API疎通確認（Developer Token・顧客ID要確認）
-- [x] 5. ダミーデータで `site/index.html` の画面・グラフ構成の枠を作成（実データ接続と並行で進行中）
+- [x] 5. ダミーデータで `site/index.html` の画面・グラフ構成の枠を作成（4ページ構成にリニューアル済み）
 - [ ] 6. `update.command` の作成
 
 現在、`data/connectors/*.py` はダミーデータを返すスタブ。実APIに接続する際はこのファイルの中身だけを差し替え、`build_data.py`側のインターフェースは変えない。
